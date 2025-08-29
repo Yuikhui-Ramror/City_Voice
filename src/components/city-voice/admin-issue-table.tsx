@@ -6,6 +6,9 @@ import {
   ArrowUpDown,
   FileCog,
   Bot,
+  Check,
+  X,
+  ShieldQuestion,
 } from 'lucide-react';
 import {
   Table,
@@ -22,6 +25,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent
 } from '@/components/ui/dropdown-menu';
 import {
   Dialog,
@@ -41,8 +47,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { mockIssues, issueCategories, departments, Issue, IssueStatus } from '@/lib/data';
+import { mockIssues, issueCategories, departments, Issue, IssueStatus, mockUsers } from '@/lib/data';
 import { routeReport, RouteReportOutput } from '@/ai/flows/route-reports-to-correct-department';
+import { reprioritizeIssueOnVerification } from '@/ai/flows/reprioritize-issue-on-verification';
 import { useToast } from '@/hooks/use-toast';
 
 const statusColors: { [key in IssueStatus]: string } = {
@@ -52,8 +59,11 @@ const statusColors: { [key in IssueStatus]: string } = {
   Resolved: 'bg-green-500 hover:bg-green-500',
 };
 
+const TOKENS_PER_VERIFIED_ISSUE = 1;
+
 export function AdminIssueTable() {
   const [issues, setIssues] = useState<Issue[]>(mockIssues);
+  const [users, setUsers] = useState(mockUsers);
   const [filters, setFilters] = useState({ category: 'all', location: '' });
   const [sort, setSort] = useState({ key: 'priority', order: 'desc' });
   const [aiSuggestion, setAiSuggestion] = useState<RouteReportOutput | null>(null);
@@ -69,6 +79,52 @@ export function AdminIssueTable() {
     setIssues(issues.map(issue => issue.id === id ? { ...issue, department: newDept } : issue));
   };
   
+  const handleVerification = async (issueId: string, isVerified: boolean) => {
+    const issueToUpdate = issues.find(i => i.id === issueId);
+    if (!issueToUpdate) return;
+
+    // Avoid re-awarding tokens
+    const alreadyVerified = issueToUpdate.verified === true;
+    if (isVerified && !alreadyVerified) {
+        setUsers(prevUsers => ({
+            ...prevUsers,
+            [issueToUpdate.userId]: {
+                ...prevUsers[issueToUpdate.userId],
+                tokens: (prevUsers[issueToUpdate.userId].tokens || 0) + TOKENS_PER_VERIFIED_ISSUE
+            }
+        }));
+         toast({
+            title: "Token Awarded!",
+            description: `${users[issueToUpdate.userId].name} received ${TOKENS_PER_VERIFIED_ISSUE} token for valid report.`,
+        });
+    }
+
+    setIssues(issues.map(i => i.id === issueId ? { ...i, verified: isVerified } : i));
+
+    try {
+        const { newPriorityScore, reasoning } = await reprioritizeIssueOnVerification({
+            issueDescription: issueToUpdate.text,
+            currentPriority: issueToUpdate.priority,
+            isVerified: isVerified,
+            engagement: issueToUpdate.engagement,
+        });
+
+        setIssues(issues.map(i => i.id === issueId ? { ...i, priority: newPriorityScore } : i));
+        toast({
+            title: `Issue Priority Updated to ${newPriorityScore}`,
+            description: reasoning,
+        });
+
+    } catch(e) {
+        console.error("Failed to re-prioritize issue", e);
+        toast({
+            title: "AI Re-prioritization Failed",
+            description: "Could not update priority via AI. Please adjust manually if needed.",
+            variant: "destructive"
+        })
+    }
+  };
+
   const getAiRouting = async (issue: Issue) => {
     setIsAiLoading(true);
     setIsAiModalOpen(true);
@@ -169,13 +225,14 @@ export function AdminIssueTable() {
                 </Button>
               </TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Verification</TableHead>
               <TableHead>Assigned Dept.</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredIssues.map((issue) => (
-              <TableRow key={issue.id}>
+              <TableRow key={issue.id} className={issue.verified === false ? 'bg-destructive/10' : ''}>
                 <TableCell className="font-medium">{issue.id}</TableCell>
                 <TableCell><Badge variant="outline">{issue.category}</Badge></TableCell>
                 <TableCell>{issue.location}</TableCell>
@@ -195,6 +252,25 @@ export function AdminIssueTable() {
                         ))}
                     </SelectContent>
                   </Select>
+                </TableCell>
+                <TableCell>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                           <Button variant="outline" size="sm" className='w-32 justify-start'>
+                             {issue.verified === true && <><Check className="mr-2 h-4 w-4 text-green-600"/> Verified</>}
+                             {issue.verified === false && <><X className="mr-2 h-4 w-4 text-red-600"/> Invalid</>}
+                             {issue.verified === undefined && <><ShieldQuestion className="mr-2 h-4 w-4 text-gray-500"/> Unreviewed</>}
+                           </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuItem onSelect={() => handleVerification(issue.id, true)}>
+                                <Check className="mr-2 h-4 w-4 text-green-600"/> Mark as Verified
+                            </DropdownMenuItem>
+                             <DropdownMenuItem onSelect={() => handleVerification(issue.id, false)}>
+                                <X className="mr-2 h-4 w-4 text-red-600"/> Mark as Invalid
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </TableCell>
                 <TableCell>
                   <Select value={issue.department || ''} onValueChange={(value) => handleDeptChange(issue.id, value as string)}>

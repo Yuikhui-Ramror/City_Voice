@@ -7,6 +7,7 @@ import {
   PlusCircle,
   Settings,
   User,
+  Medal,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -28,12 +29,16 @@ import {
 } from '@/components/ui/sheet';
 import { ReportIssueForm } from '@/components/city-voice/report-issue-form';
 import { CityVoiceLogo } from '@/components/city-voice/logo';
+import { mockUsers } from '@/lib/data';
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // In a real app, you'd get the current user from session/context
+  const currentUser = mockUsers['a042581f4e29026704d'];
+
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
       <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 sm:px-6">
@@ -47,6 +52,11 @@ export default function DashboardLayout({
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-4">
+          <div className="hidden items-center gap-2 sm:flex">
+            <Medal className="h-5 w-5 text-yellow-500" />
+            <span className="font-semibold">{currentUser.tokens}</span>
+            <span className="text-sm text-muted-foreground">Tokens</span>
+          </div>
           <Sheet>
             <SheetTrigger asChild>
               <Button size="sm" className="gap-1">
@@ -74,8 +84,8 @@ export default function DashboardLayout({
             <DropdownMenuTrigger asChild>
               <Button variant="secondary" size="icon" className="rounded-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="https://i.pravatar.cc/150?u=a042581f4e29026704d" />
-                  <AvatarFallback>U</AvatarFallback>
+                  <AvatarImage src={currentUser.avatarUrl} />
+                  <AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback>
                 </Avatar>
                 <span className="sr-only">Toggle user menu</span>
               </Button>

@@ -6,8 +6,10 @@ import {
   Share2,
   ThumbsUp,
   MapPin,
+  CheckCircle,
 } from 'lucide-react';
-import type { Issue } from '@/lib/data';
+import type { Issue, User } from '@/lib/data';
+import { mockUsers } from '@/lib/data';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,17 +33,26 @@ type IssueCardProps = {
 };
 
 export function IssueCard({ issue }: IssueCardProps) {
+    const user = mockUsers[issue.userId];
+
   return (
     <Card className="overflow-hidden bg-card">
       <CardHeader className="flex flex-row items-start gap-4 p-4">
         <Avatar>
-          <AvatarImage src={issue.user.avatarUrl} alt={issue.user.name} />
+          <AvatarImage src={user.avatarUrl} alt={user.name} />
           <AvatarFallback>
-            {issue.user.name.charAt(0).toUpperCase()}
+            {user.name.charAt(0).toUpperCase()}
           </AvatarFallback>
         </Avatar>
         <div className="flex-1">
-          <p className="font-semibold">{issue.user.name}</p>
+            <div className='flex items-center gap-2'>
+                 <p className="font-semibold">{user.name}</p>
+                 {issue.verified && (
+                    <Badge variant="secondary" className='gap-1 border-green-300 bg-green-50 text-green-700'>
+                        <CheckCircle className='h-3 w-3' /> Verified
+                    </Badge>
+                 )}
+            </div>
           <p className="text-xs text-muted-foreground">
             {formatDistanceToNow(issue.timestamp, { addSuffix: true })}
           </p>

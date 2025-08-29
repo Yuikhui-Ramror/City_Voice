@@ -30,7 +30,7 @@ export default function AdminDashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{resolvedIssues}</div>
             <p className="text-xs text-muted-foreground">
-              {((resolvedIssues / totalIssues) * 100).toFixed(1)}% resolution rate
+              {totalIssues > 0 ? ((resolvedIssues / totalIssues) * 100).toFixed(1) : 0}% resolution rate
             </p>
           </CardContent>
         </Card>
@@ -60,7 +60,7 @@ export default function AdminDashboardPage() {
         <CardHeader>
             <CardTitle className="font-headline">Issue Management</CardTitle>
             <CardDescription>Filter, sort, and manage all reported civic issues.</CardDescription>
-        </CardHeader>
+        </Header>
         <CardContent>
             <AdminIssueTable />
         </CardContent>

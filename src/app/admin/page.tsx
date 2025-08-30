@@ -60,9 +60,9 @@ export default function AdminDashboardPage() {
         <CardHeader>
             <CardTitle className="font-headline">Issue Management</CardTitle>
             <CardDescription>Filter, sort, and manage all reported civic issues.</CardDescription>
-        </Header>
+        </CardHeader>
         <CardContent>
-            <AdminIssueTable />
+            <AdminIssueTable  />
         </CardContent>
       </Card>
     </div>

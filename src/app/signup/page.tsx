@@ -25,8 +25,8 @@ import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { auth, googleProvider } from '@/firebaseConfig';
-import { signInWithEmailAndPassword, signInWithPopup, onAuthStateChanged, sendEmailVerification } from 'firebase/auth';
-import { AlertTriangle } from 'lucide-react';
+import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, onAuthStateChanged } from 'firebase/auth';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 const formSchema = z.object({
   email: z
@@ -34,90 +34,94 @@ const formSchema = z.object({
     .min(1, { message: 'This field has to be filled.' })
     .email('This is not a valid email.'),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
+  confirmPassword: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 });
 
-export default function LoginPage() {
+export default function SignUpPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [resendEmail, setResendEmail] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(10);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       email: '',
       password: '',
+      confirmPassword: '',
     },
   });
 
-  // Check if user is already logged in and email is verified
+  // Check if user is already logged in
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user && (user.emailVerified || user.providerData[0].providerId === 'google.com')) {
-        // User is logged in and either email is verified or using Google, redirect to dashboard
+      if (user) {
+        // User is logged in, redirect to dashboard
         router.push('/dashboard');
       }
-      // No redirect for unverified email users; they stay on login page
     });
     return () => unsubscribe(); // Cleanup subscription on unmount
   }, [router]);
 
+  // Handle countdown and redirect after successful email sign-up
+  useEffect(() => {
+    if (successMessage && countdown > 0) {
+      const timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            router.push('/login');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer); // Cleanup timer on unmount
+    }
+  }, [successMessage, countdown, router]);
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       setError(null);
-      setResendEmail(null);
-      // Sign in with email and password
-      const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
-      if (!userCredential.user.emailVerified) {
-        // Email not verified, send verification email and show error
-        await sendEmailVerification(userCredential.user);
-        setError('Please verify your email before logging in.');
-        setResendEmail(values.email);
-        return;
-      }
-      router.push('/dashboard');
+      setSuccessMessage(null);
+      // Sign up with email and password
+      const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
+      // Send verification email
+      await sendEmailVerification(userCredential.user);
+      // Show success message with countdown
+      setSuccessMessage(`Verification email sent to ${values.email}! Please check your inbox. Redirecting to login in ${countdown} seconds...`);
+      setCountdown(10); // Reset countdown
     } catch (error: any) {
       // Handle Firebase errors
       switch (error.code) {
-        case 'auth/user-not-found':
-          setError('No account found with this email.');
+        case 'auth/email-already-in-use':
+          setError('An account already exists with this email.');
           break;
-        case 'auth/wrong-password':
-          setError('Incorrect password.');
+        case 'auth/invalid-email':
+          setError('Invalid email format.');
           break;
-        case 'auth/invalid-credential':
-          setError('Invalid email or password.');
+        case 'auth/weak-password':
+          setError('Password is too weak. Please use a stronger password.');
           break;
         default:
-          setError('An error occurred. Please try again.');
+          setError('An error occurred during sign-up. Please try again.');
       }
     }
   }
 
-  async function handleResendVerification() {
-    if (!resendEmail) return;
+  async function handleGoogleSignUp() {
     try {
       setError(null);
-      const userCredential = await signInWithEmailAndPassword(auth, resendEmail, form.getValues('password'));
-      if (!userCredential.user.emailVerified) {
-        await sendEmailVerification(userCredential.user);
-        setError(`Verification email resent to ${resendEmail}. Please check your inbox.`);
-      }
-    } catch (error: any) {
-      setError('Failed to resend verification email. Please try again.');
-    }
-  }
-
-  async function handleGoogleLogin() {
-    try {
-      setError(null);
-      setResendEmail(null);
+      setSuccessMessage(null);
       setIsGoogleLoading(true);
-      // Sign in with Google
+      // Sign up with Google
       await signInWithPopup(auth, googleProvider);
       router.push('/dashboard');
     } catch (error: any) {
-      // Handle Google sign-in errors
-      setError('Failed to sign in with Google.');
+      // Handle Google sign-up errors
+      setError('Failed to sign up with Google. Please try again.');
       setIsGoogleLoading(false);
     }
   }
@@ -144,11 +148,11 @@ export default function LoginPage() {
         <CardHeader>
           <CardTitle className="font-headline text-xl text-white" style={{
             fontFamily: 'Poppins'
-          }}>Citizen Login</CardTitle>
+          }}>Citizen Sign Up</CardTitle>
           <CardDescription>
             <span className='text-[14px] text-white/70' style={{
               fontFamily: 'Poppins'
-            }}>Enter your credentials to report and track civic issues.</span>
+            }}>Create an account to report and track civic issues.</span>
           </CardDescription>
         </CardHeader>
         <Form {...form}>
@@ -156,19 +160,12 @@ export default function LoginPage() {
             <CardContent className="grid gap-3 -mt-4">
               {error && (
                 <div className="text-red-500 text-[13px] text-left p-3 rounded-lg border border-red-500 bg-red-950/50 flex gap-2">
-                  <AlertTriangle size={18} />
-                  <div>
-                    {error}
-                    {resendEmail && error.includes('verify your email') && (
-                      <button
-                        type="button"
-                        onClick={handleResendVerification}
-                        className="underline text-red-300 hover:text-red-100 ml-1"
-                      >
-                        Resend verification email
-                      </button>
-                    )}
-                  </div>
+                  <AlertTriangle size={18} /> {error}
+                </div>
+              )}
+              {successMessage && (
+                <div className="text-green-500 text-[13px] text-left p-3 rounded-lg border border-green-500 bg-green-950/50 flex gap-2">
+                  <CheckCircle2 size={18} /> {successMessage}
                 </div>
               )}
               <FormField
@@ -200,10 +197,29 @@ export default function LoginPage() {
                     <FormControl>
                       <Input 
                         type="password" 
-                        placeholder='enter password' 
+                        placeholder='Enter password' 
                         className='bg-black/60 border-white/60 text-white' 
                         {...field} 
-                        autoComplete="current-password" 
+                        autoComplete="new-password" 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className='text-white/80'>Confirm Password</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="password" 
+                        placeholder='Confirm password' 
+                        className='bg-black/60 border-white/60 text-white' 
+                        {...field} 
+                        autoComplete="new-password" 
                       />
                     </FormControl>
                     <FormMessage />
@@ -215,14 +231,14 @@ export default function LoginPage() {
               <Button 
                 type="submit" 
                 className="w-full"
-                disabled={!form.formState.isValid} // Disable if form is invalid
+                disabled={!form.formState.isValid || successMessage !== null} // Disable if form is invalid or success message is shown
               >
-                Login Citizen
+                Sign Up
               </Button>
               <Button
                 variant="outline"
                 className="w-full border border-black/10 hover:bg-gray-200 hover:text-black disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleGoogleLogin}
+                onClick={handleGoogleSignUp}
                 disabled={isGoogleLoading}
               >
                 {isGoogleLoading ? (
@@ -276,7 +292,7 @@ export default function LoginPage() {
                         fill="#EA4335"
                       />
                     </svg>
-                    Continue with Google
+                    Sign Up with Google
                   </>
                 )}
               </Button>
@@ -289,7 +305,7 @@ export default function LoginPage() {
         </Form>
       </Card>
       <p className="mt-4 text-xs text-white/60">
-        New user? <Link href="/signup" className="underline font-semibold hover:font-bold">Sign up now</Link>
+        Already have an account? <Link href="/" className="underline font-semibold hover:font-bold">Log in</Link>
       </p>
     </div>
   );

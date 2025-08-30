@@ -208,7 +208,17 @@ export function AdminIssueTable() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            {issueCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+            {issueCategories.map(cat => {
+  if (!cat) {
+    console.warn("Empty category found:", cat);
+  }
+  return (
+    <SelectItem key={cat || "empty"} value={cat || "unknown"}>
+      {cat || "Unknown"}
+    </SelectItem>
+  );
+})}
+
           </SelectContent>
         </Select>
       </div>
